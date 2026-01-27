@@ -2,16 +2,25 @@
 //  screen_buddyApp.swift
 //  screen buddy
 //
-//  Created by Darasimi Oni on 19/01/2026.
+//  Main app entry point
 //
 
 import SwiftUI
 
 @main
 struct screen_buddyApp: App {
+    // Use AppDelegate for panel management
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    init() {
+        // Initialize ContextEngine (it's opt-in now - doesn't auto-start)
+        _ = ContextEngine.shared
+    }
+    
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        // Settings scene for preferences window
+        Settings {
+            SettingsView()
         }
     }
 }

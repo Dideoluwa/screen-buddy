@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>GEMINI_API_KEY</key>
+	<string>$(GEMINI_API_KEY)</string>
+	<key>GEMINI_MODEL</key>
+	<string>$(GEMINI_MODEL)</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Screen Buddy listens to system audio to understand the context of what you are watching (e.g., YouTube tutorials) to provide helpful assistance. Audio is processed on-device.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Screen Buddy uses microphone access for audio analysis fallback.</string>
+</dict>
+</plist>

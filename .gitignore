@@ -1,0 +1,21 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad
+xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+*.resolved
+
+# API Keys and Secrets - DO NOT COMMIT
+Config.xcconfig
+
+# macOS
+.DS_Store
+*.profraw
+
+# CocoaPods
+Pods/
