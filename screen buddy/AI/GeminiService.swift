@@ -43,7 +43,7 @@ struct GeminiConfig {
     static let `default` = GeminiConfig(
         apiKey: getAPIKey(),
         model: getModel(),
-        maxTokens: 1024,
+        maxTokens: 4096,
         temperature: 0.7
     )
 }
@@ -137,7 +137,7 @@ class GeminiService {
         config = GeminiConfig(
             apiKey: apiKey,
             model: model,
-            maxTokens: 1024,
+            maxTokens: 4096,
             temperature: 0.7
         )
         saveAPIKey(apiKey)

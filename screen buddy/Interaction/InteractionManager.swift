@@ -52,6 +52,12 @@ class InteractionManager {
         
         print("📝 [USER INPUT]: \(text)")
         
+        // Check if this should be handled by Agent Mode
+        if shouldUseAgentMode(text) {
+            await handleAgentRequest(text, robotState: robotState)
+            return
+        }
+        
         // Add user message to history
         await MainActor.run {
             let message = ChatMessage(text: text, isUser: true, timestamp: Date())
@@ -75,6 +81,127 @@ class InteractionManager {
             await fetchGeminiResponse(text: text, context: contextSnapshot, robotState: robotState)
         } else {
             await showFallbackResponse(text: text, context: contextSnapshot, robotState: robotState)
+        }
+    }
+    
+    // MARK: - Agent Mode
+    
+    /// Detect if the user input should trigger Agent Mode
+    private func shouldUseAgentMode(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        
+        // Action verbs that indicate the user wants something done, not just discussed
+        let actionVerbs = [
+            "open ", "launch ", "start ",       // App launching
+            "create ", "make ", "new ",          // Creating things
+            "install ", "download ", "get ",     // Installing
+            "run ", "execute ", "build ",        // Running commands
+            "search for", "look up", "find ",   // Searching
+            "set up", "setup", "configure"       // Setup tasks
+        ]
+        
+        // Check if any action verb is present
+        let hasActionVerb = actionVerbs.contains { lowercased.contains($0) }
+        
+        // Also check for specific patterns that imply action
+        let actionPatterns = [
+            "and then",      // Multi-step requests
+            "after that",
+            "folder",        // File system operations
+            "directory",
+            "terminal",
+            "command",
+            "project",       // Project setup
+            "boilerplate",
+            "react app",
+            "npm",
+            "npx"
+        ]
+        
+        let hasActionPattern = actionPatterns.contains { lowercased.contains($0) }
+        
+        // Exclude questions that are just asking about how to do something
+        let isJustAsking = lowercased.hasPrefix("how do i") || 
+                          lowercased.hasPrefix("how can i") ||
+                          lowercased.hasPrefix("what is") ||
+                          lowercased.hasPrefix("explain")
+        
+        let shouldUseAgent = (hasActionVerb || hasActionPattern) && !isJustAsking
+        
+        print("🔍 Agent Mode Detection:")
+        print("   Action Verb: \(hasActionVerb)")
+        print("   Action Pattern: \(hasActionPattern)")
+        print("   Just Asking: \(isJustAsking)")
+        print("   → Use Agent: \(shouldUseAgent)")
+        
+        return shouldUseAgent
+    }
+    
+    /// Handle request using Agent Mode
+    private func handleAgentRequest(_ text: String, robotState: RobotState) async {
+        print("🤖 [AGENT MODE] Processing: \(text)")
+        
+        // Add user message to history
+        await MainActor.run {
+            let message = ChatMessage(text: text, isUser: true, timestamp: Date())
+            robotState.chatHistory.append(message)
+            chatHistoryManager.save(robotState.chatHistory)
+            
+            // Set up agent mode UI
+            robotState.isAgentMode = true
+            robotState.showResponseBubble = true
+            robotState.expression = .thinking
+            robotState.agentProgress = "Planning..."
+        }
+        
+        // Execute via AgentLoopController
+        let controller = AgentLoopController.shared
+        
+        // Set up observation of agent progress
+        let progressTask = Task { @MainActor in
+            var lastMessageCount = 0
+            while controller.state.isActive {
+                // Update UI with progress
+                if controller.progressMessages.count > lastMessageCount {
+                    robotState.agentProgressMessages = controller.progressMessages
+                    if let latest = controller.progressMessages.last {
+                        robotState.agentProgress = latest
+                    }
+                    lastMessageCount = controller.progressMessages.count
+                }
+                
+                // Update step counter
+                if case .executing(let step, let total) = controller.state {
+                    robotState.currentAgentStep = step
+                    robotState.totalAgentSteps = total
+                }
+                
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+            }
+        }
+        
+        // Execute the agent
+        let result = await controller.execute(userIntent: text)
+        
+        // Cancel progress observation
+        progressTask.cancel()
+        
+        // Update UI with result
+        await MainActor.run {
+            isProcessing = false
+            robotState.isAgentMode = false
+            robotState.agentProgress = ""
+            robotState.currentAgentStep = 0
+            robotState.totalAgentSteps = 0
+            
+            // Add result to chat history
+            let message = ChatMessage(text: result, isUser: false, timestamp: Date())
+            robotState.chatHistory.append(message)
+            chatHistoryManager.save(robotState.chatHistory)
+            
+            robotState.expression = controller.state == .aborted(reason: "") ? .surprised : .happy
+            robotState.currentResponse = result
+            robotState.showResponseBubble = true
         }
     }
     

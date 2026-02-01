@@ -11,8 +11,9 @@ import SwiftUI
 struct RobotView: View {
     @EnvironmentObject var panelController: FloatingPanelController
     @State private var eyeOpenAmount: CGFloat = 1.0
-    @State private var dragOffset: CGSize = .zero
     @State private var isDragging: Bool = false
+    @State private var dragStartMouseLocation: NSPoint = .zero
+    @State private var dragStartPanelOrigin: CGPoint = .zero
     @State private var showMenu: Bool = false
     
     let size: CGFloat = 48
@@ -29,11 +30,16 @@ struct RobotView: View {
             .breathing()
             .blinking(eyeOpenAmount: $eyeOpenAmount)
             .scaleEffect(isDragging ? 1.1 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isDragging)
-            .gesture(dragGesture)
-            .onTapGesture {
-                handleTap()
-            }
+            .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: isDragging)
+            .simultaneousGesture(
+                TapGesture()
+                    .onEnded {
+                        if !isDragging {
+                            handleTap()
+                        }
+                    }
+            )
+            .highPriorityGesture(dragGesture)
             .padding(.bottom, 20) // Keep robot slightly off the bottom edge
             .contextMenu {
                 Toggle("Show Chat History", isOn: Binding(
@@ -95,22 +101,29 @@ struct RobotView: View {
     // MARK: - Gestures
     
     private var dragGesture: some Gesture {
-        DragGesture()
+        DragGesture(minimumDistance: 3, coordinateSpace: .local)
             .onChanged { value in
+                // Get current mouse location in screen coordinates
+                let currentMouseLocation = NSEvent.mouseLocation
+                
                 if !isDragging {
                     isDragging = true
                     panelController.isDragging = true
                 }
-                panelController.handleDrag(translation: CGSize(
-                    width: value.translation.width - dragOffset.width,
-                    height: value.translation.height - dragOffset.height
-                ))
-                dragOffset = value.translation
+                
+                // Get panel size to center robot on cursor
+                let panelSize = panelController.panelFrame?.size ?? CGSize(width: 140, height: 140)
+                
+                // Position panel so robot (at bottom center) is at cursor
+                // Robot is centered horizontally and near bottom of panel
+                let newX = currentMouseLocation.x - (panelSize.width / 2)
+                let newY = currentMouseLocation.y - 50 // Offset to put cursor on robot body
+                
+                panelController.updatePosition(CGPoint(x: newX, y: newY))
             }
             .onEnded { _ in
                 isDragging = false
                 panelController.isDragging = false
-                dragOffset = .zero
                 panelController.snapToEdge()
             }
     }
@@ -265,27 +278,42 @@ struct ChatBubble: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Chat with Buddy")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white.opacity(0.8))
+                if robotState.isAgentMode {
+                    // Agent Mode Header
+                    HStack(spacing: 6) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.yellow)
+                        Text("Agent Mode")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.yellow)
+                    }
+                } else {
+                    Text("Chat with Buddy")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white.opacity(0.8))
+                }
                 
                 Spacer()
                 
-                // Show/Hide History Toggle Button
-                Button(action: {
-                    robotState.showHistory.toggle()
-                    ChatHistoryManager.shared.saveShowHistoryPreference(robotState.showHistory)
-                }) {
-                    Image(systemName: robotState.showHistory ? "eye.fill" : "eye.slash.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.6))
-                        .padding(6)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
+                // Show/Hide History Toggle Button (hide during agent mode)
+                if !robotState.isAgentMode {
+                    Button(action: {
+                        robotState.showHistory.toggle()
+                        ChatHistoryManager.shared.saveShowHistoryPreference(robotState.showHistory)
+                    }) {
+                        Image(systemName: robotState.showHistory ? "eye.fill" : "eye.slash.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.6))
+                            .padding(6)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(robotState.showHistory ? "Hide History" : "Show History")
                 }
-                .buttonStyle(.plain)
-                .help(robotState.showHistory ? "Hide History" : "Show History")
                 
                 // Clear History Button
                 Button(action: {
@@ -315,7 +343,82 @@ struct ChatBubble: View {
             .padding(.horizontal, 14)
             .padding(.top, 10)
             .padding(.bottom, 8)
-            .background(Color.black.opacity(0.2))
+            .background(robotState.isAgentMode ? Color(hex: "3B2F4F").opacity(0.8) : Color.black.opacity(0.2))
+            
+            // Agent Progress Section
+            if robotState.isAgentMode {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Progress bar
+                    if robotState.totalAgentSteps > 0 {
+                        HStack(spacing: 8) {
+                            Text("Step \(robotState.currentAgentStep)/\(robotState.totalAgentSteps)")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            ProgressView(value: Double(robotState.currentAgentStep), 
+                                       total: Double(robotState.totalAgentSteps))
+                                .progressViewStyle(LinearProgressViewStyle(tint: Color(hex: "667EEA")))
+                                .frame(height: 4)
+                        }
+                    }
+                    
+                    // Current action
+                    if !robotState.agentProgress.isEmpty {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                                .frame(width: 12, height: 12)
+                            
+                            Text(robotState.agentProgress)
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.8))
+                                .lineLimit(2)
+                        }
+                    }
+                    
+                    // Agent question with Yes/No buttons
+                    if AgentLoopController.shared.state.isWaitingForUser {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(AgentLoopController.shared.pendingQuestion)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white)
+                                .lineLimit(3)
+                            
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    AgentLoopController.shared.provideUserResponse("yes")
+                                }) {
+                                    Text("Yes")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(Color(hex: "667EEA"))
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Button(action: {
+                                    AgentLoopController.shared.provideUserResponse("no")
+                                }) {
+                                    Text("No")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(Color.white.opacity(0.15))
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 6)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color(hex: "2D2440").opacity(0.6))
+            }
             
             // Content area
             ScrollViewReader { proxy in

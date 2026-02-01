@@ -40,6 +40,15 @@ class RobotState {
     var showHistory: Bool = false  // Toggle for power users to view chat history
     var isContextAwarenessEnabled: Bool = false  // Opt-in context awareness
     
+    // Agent Mode state
+    var isAgentMode: Bool = false {
+        didSet { onLayoutChange?() }
+    }
+    var agentProgress: String = ""
+    var currentAgentStep: Int = 0
+    var totalAgentSteps: Int = 0
+    var agentProgressMessages: [String] = []
+    
     // Animation states
     var eyeOpenAmount: CGFloat = 1.0 // 0 = closed, 1 = open
     var breathScale: CGFloat = 1.0
