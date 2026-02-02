@@ -40,7 +40,18 @@ class RobotState {
     var showHistory: Bool = false  // Toggle for power users to view chat history
     var isContextAwarenessEnabled: Bool = false  // Opt-in context awareness
     
-    // Agent Mode state
+    // Agent Mode toggle - when true, ALL inputs go to smart agent
+    var agentModeEnabled: Bool = false {
+        didSet {
+            if agentModeEnabled {
+                print("🤖 Agent Mode ENABLED - all inputs will use smart agent")
+            } else {
+                print("💬 Agent Mode DISABLED - using auto-detection")
+            }
+        }
+    }
+    
+    // Agent Mode state (is agent currently executing)
     var isAgentMode: Bool = false {
         didSet { onLayoutChange?() }
     }

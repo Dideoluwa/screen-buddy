@@ -93,6 +93,11 @@ class AgentLoopController {
         actionHistory = []
         
         while actionHistory.count < maxSteps {
+            // CHECK FOR CANCELLATION
+            if case .aborted = state {
+                throw AgentError.userCancelled
+            }
+            
             let stepNum = actionHistory.count + 1
             
             await MainActor.run {
@@ -109,6 +114,11 @@ class AgentLoopController {
                 addProgress("Thinking about next action...")
             }
             
+            // CHECK FOR CANCELLATION
+            if case .aborted = state {
+                throw AgentError.userCancelled
+            }
+            
             // 2. THINK - Ask LLM what to do next
             print("🧠 [\(stepNum)] THINKING...")
             let decision = try await decideNextAction(
@@ -118,6 +128,35 @@ class AgentLoopController {
             )
             
             print("💡 [\(stepNum)] Decision: \(decision.action) - \(decision.reason)")
+            
+            // Handle "ask_user" specially
+            if decision.action == "ask_user" {
+                let question = decision.params["question"] ?? "Should I proceed?"
+                
+                await MainActor.run {
+                    state = .waitingForUser(question: question)
+                    pendingQuestion = question
+                    addProgress("❓ \(question)")
+                }
+                
+                // Wait for user response
+                let userResponse = await waitForUserResponse()
+                
+                await MainActor.run {
+                    addProgress("You said: \(userResponse)")
+                }
+                
+                // Record interaction in history
+                let historyEntry = ActionHistoryEntry(
+                    stepNumber: stepNum,
+                    action: "ask_user",
+                    params: ["question": question, "response": userResponse],
+                    observation: "User responded: \(userResponse)",
+                    success: true
+                )
+                actionHistory.append(historyEntry)
+                continue
+            }
             
             // 3. Check if DONE
             if decision.isDone {
@@ -148,8 +187,24 @@ class AgentLoopController {
             
             print("📝 [\(stepNum)] Result: \(result.success ? "✓" : "✗") - \(result.observation.prefix(100))")
             
-            // Small delay to let UI update
-            try await Task.sleep(nanoseconds: 500_000_000)
+            // Check if stuck (last 3 actions failed or same observation)
+            if actionHistory.count >= 3 {
+                let last3 = actionHistory.suffix(3)
+                if last3.allSatisfy({ !$0.success }) {
+                    // Force ask user if stuck
+                    let entry = ActionHistoryEntry(
+                        stepNumber: stepNum + 1,
+                        action: "system_note",
+                        params: [:],
+                        observation: "SYSTEM ALERT: You have failed 3 times in a row. You MUST use 'ask_user' next to ask for help.",
+                        success: false
+                    )
+                    actionHistory.append(entry)
+                }
+            }
+            
+            // Minimal delay to let UI update
+            try await Task.sleep(nanoseconds: 50_000_000)
         }
         
         // Max steps reached
@@ -177,6 +232,7 @@ class AgentLoopController {
 
         AVAILABLE ACTIONS:
         \(toolsList)
+        ask_user(question) - Ask the user for confirmation or help (use this if unsure!)
         done(message) - Call when goal is complete or cannot be achieved
 
         Look at the screenshot and decide the SINGLE best next action.
@@ -186,6 +242,7 @@ class AgentLoopController {
         - For browser: type search terms naturally (not URLs)
         - Use observe_screen if you need to read text on screen
         - Click specific coordinates when you see something to click
+        - If you are unsure or stuck, use "ask_user" to get help
         - Call "done" when the goal is achieved or impossible
 
         Respond with ONLY this JSON (no markdown):

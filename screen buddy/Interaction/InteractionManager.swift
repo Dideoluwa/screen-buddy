@@ -52,8 +52,11 @@ class InteractionManager {
         
         print("📝 [USER INPUT]: \(text)")
         
-        // Check if this should be handled by Agent Mode
-        if shouldUseAgentMode(text) {
+        // Check if Agent Mode is explicitly enabled OR if this should be auto-detected
+        if robotState.agentModeEnabled || shouldUseAgentMode(text) {
+            if robotState.agentModeEnabled {
+                print("🤖 [AGENT MODE ON] Processing with smart agent")
+            }
             await handleAgentRequest(text, robotState: robotState)
             return
         }

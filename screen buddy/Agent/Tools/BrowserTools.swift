@@ -64,7 +64,7 @@ class BrowserTypeTool: BaseAgentTool {
     
     override func execute(params: [String: String]) async throws -> String {
         let text = try requireParam("text", from: params)
-        let delayMs = Int(params["delay_ms"] ?? "100") ?? 100  // 100ms = human-like speed
+        let delayMs = Int(params["delay_ms"] ?? "20") ?? 20  // 20ms = fast typing speed
         
         print("⌨️ Typing visibly: '\(text)'")
         
@@ -87,22 +87,35 @@ class BrowserTypeTool: BaseAgentTool {
         }
         
         let needsShift = char.isUppercase || shiftRequired(char)
+        let shiftKeyCode: CGKeyCode = 56 // Left Shift
         
-        // Key down
+        // 1. Press Shift if needed
         if needsShift {
-            let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(56), keyDown: true)
+            let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: shiftKeyCode, keyDown: true)
             shiftDown?.post(tap: .cghidEventTap)
+            // Tiny delay to let system register shift
+            usleep(2000)
         }
         
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
-        keyDown?.post(tap: .cghidEventTap)
+        // 2. Press Key (with flags explicitly set)
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) {
+            if needsShift {
+                keyDown.flags = .maskShift
+            }
+            keyDown.post(tap: .cghidEventTap)
+        }
         
-        // Key up
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
-        keyUp?.post(tap: .cghidEventTap)
+        // 3. Release Key
+        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) {
+            if needsShift {
+                keyUp.flags = .maskShift
+            }
+            keyUp.post(tap: .cghidEventTap)
+        }
         
+        // 4. Release Shift if needed
         if needsShift {
-            let shiftUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(56), keyDown: false)
+            let shiftUp = CGEvent(keyboardEventSource: source, virtualKey: shiftKeyCode, keyDown: false)
             shiftUp?.post(tap: .cghidEventTap)
         }
     }

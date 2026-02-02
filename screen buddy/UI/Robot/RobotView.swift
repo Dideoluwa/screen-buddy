@@ -315,6 +315,36 @@ struct ChatBubble: View {
                     .help(robotState.showHistory ? "Hide History" : "Show History")
                 }
                 
+                // Stop Agent Button (only when active)
+                if AgentLoopController.shared.state.isActive {
+                    Button(action: {
+                        AgentLoopController.shared.cancel()
+                    }) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                            .padding(6)
+                            .background(Color.red.opacity(0.8))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop Agent")
+                }
+
+                // Agent Mode Toggle Button
+                Button(action: {
+                    robotState.agentModeEnabled.toggle()
+                }) {
+                    Image(systemName: robotState.agentModeEnabled ? "brain.head.profile.fill" : "brain.head.profile")
+                        .font(.system(size: 12))
+                        .foregroundColor(robotState.agentModeEnabled ? Color(hex: "667EEA") : .white.opacity(0.6))
+                        .padding(6)
+                        .background(robotState.agentModeEnabled ? Color(hex: "667EEA").opacity(0.3) : Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(robotState.agentModeEnabled ? "Agent Mode ON (click to disable)" : "Enable Agent Mode")
+                
                 // Clear History Button
                 Button(action: {
                     InteractionManager.shared.clearHistory(robotState: robotState)
